@@ -106,15 +106,26 @@ describe('auth.methods', () => {
 describe('auth.loader', () => {
   const originalFetch = globalThis.fetch
   const originalSetTimeout = globalThis.setTimeout
+  const originalVersionEnv = process.env.CLAUDE_CODE_VERSION
 
   beforeEach(() => {
     globalThis.fetch = originalFetch
     globalThis.setTimeout = originalSetTimeout
+    // Pin the version via explicit env override so the fetch wrapper's
+    // version resolution (src/version.ts) never touches the disk cache
+    // or the network during these tests — it short-circuits on the very
+    // first check. Dynamic resolution itself is covered by version.test.ts.
+    process.env.CLAUDE_CODE_VERSION = '2.1.87'
   })
 
   afterEach(() => {
     globalThis.fetch = originalFetch
     globalThis.setTimeout = originalSetTimeout
+    if (originalVersionEnv === undefined) {
+      delete process.env.CLAUDE_CODE_VERSION
+    } else {
+      process.env.CLAUDE_CODE_VERSION = originalVersionEnv
+    }
   })
 
   test('returns empty object for non-oauth auth', async () => {

@@ -9,8 +9,11 @@ import {
   rewriteUrl,
   setOAuthHeaders,
 } from './transform.ts'
+import { parseVersionOptions, resolveClaudeCodeVersion } from './version.ts'
 
-export const AnthropicAuthPlugin: Plugin = async ({ client }) => {
+export const AnthropicAuthPlugin: Plugin = async ({ client }, options) => {
+  const versionOptions = parseVersionOptions(options)
+
   return {
     auth: {
       provider: 'anthropic',
@@ -40,6 +43,13 @@ export const AnthropicAuthPlugin: Plugin = async ({ client }) => {
           // Shared inflight refresh promise — prevents concurrent token refreshes
           // from racing against each other (and causing 401 cascades with token rotation)
           let refreshPromise: Promise<string> | null = null
+
+          // Single-flight version resolution — resolved lazily on the first
+          // request (not at loader/startup time) and cached for the rest of
+          // this session, mirroring refreshPromise above. A real Claude Code
+          // process never changes version mid-session, so every request in
+          // this session should report the same one.
+          let versionPromise: Promise<string> | null = null
 
           return {
             apiKey: '',
@@ -139,13 +149,18 @@ export const AnthropicAuthPlugin: Plugin = async ({ client }) => {
                 auth.access = await refreshPromise
               }
 
+              if (!versionPromise) {
+                versionPromise = resolveClaudeCodeVersion(versionOptions)
+              }
+              const version = await versionPromise
+
               const requestHeaders = mergeHeaders(input, init)
               // biome-ignore lint/style/noNonNullAssertion: access is guaranteed set above
-              setOAuthHeaders(requestHeaders, auth.access!)
+              setOAuthHeaders(requestHeaders, auth.access!, version)
 
               let body = init?.body
               if (body && typeof body === 'string') {
-                body = rewriteRequestBody(body)
+                body = rewriteRequestBody(body, version)
               }
 
               const rewritten = rewriteUrl(input)
