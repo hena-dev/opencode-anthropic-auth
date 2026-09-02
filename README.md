@@ -1,14 +1,19 @@
 # OpenCode Anthropic Auth Plugin
 
+> [!NOTE]
+> This is a fork of [ex-machina-co/opencode-anthropic-auth](https://github.com/ex-machina-co/opencode-anthropic-auth) (forked at v1.8.1), published under the `@henadev` npm scope.
+
 > [!WARNING]
 > This plugin comes with no guarantees. You might be banned for breaking the TOS, you might not be. I don't work at Anthropic, nor am I an attorney.
 >
 > Use your best judgment and don't try to abuse the subscriptions. Plugins like oh-my-openagent are _known_ to trigger bans. Please be careful when using Ralph loops or insanely heavy usage patterns.
 
 > [!IMPORTANT]
-> If you are seeing issues, please try to `rm -rf ~/.cache/opencode/packages/@ex-machina` and check your `opencode.json` config to make sure you're on the latest version.
+> If you are seeing issues, please try to `rm -rf ~/.cache/opencode/packages/@henadev` and check your `opencode.json` config to make sure you're on the latest version.
 >
 > Try this FIRST before making an Issue. Thanks!
+>
+> Note: if you previously used `@ex-machina/opencode-anthropic-auth`, remove it from your plugin list — having both installed will load both.
 
 An [OpenCode](https://github.com/anomalyco/opencode) plugin that provides Anthropic OAuth authentication, enabling Claude Pro/Max users to use their subscription directly with OpenCode.
 
@@ -18,7 +23,7 @@ Add the plugin to your OpenCode configuration:
 
 ```json
 {
-  "plugin": ["@ex-machina/opencode-anthropic-auth"]
+  "plugin": ["@henadev/opencode-anthropic-auth"]
 }
 ```
 
@@ -31,7 +36,7 @@ Add the plugin to your OpenCode configuration:
 
 ```json
 {
-  "plugin": ["@ex-machina/opencode-anthropic-auth@1.8.1"]
+  "plugin": ["@henadev/opencode-anthropic-auth@0.0.1"]
 }
 ```
 
