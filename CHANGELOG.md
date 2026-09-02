@@ -1,5 +1,15 @@
 # @henadev/opencode-anthropic-auth
 
+## 0.1.0
+
+### Minor Changes
+
+- [#15](https://github.com/hena-dev/opencode-anthropic-auth/pull/15) [`9e2bbfb`](https://github.com/hena-dev/opencode-anthropic-auth/commit/9e2bbfbf853a8c736f535c34112f3118f8030187) Thanks [@hena-dev](https://github.com/hena-dev)! - Resolve the reported Claude Code version dynamically instead of a static constant.
+
+  The `user-agent` header and the billing header's `cc_version` field now resolve from (in order): an explicit `CLAUDE_CODE_VERSION` env var or `claudeCodeVersion` plugin option, a local disk cache (`~/.cache/opencode-anthropic-auth/claude-code-version.json`, 24h TTL), or a lookup of the `latest` dist-tag from the npm registry. Resolution is memoized per session and falls back to a known-good pinned version if the lookup fails or is disabled (`OPENCODE_ANTHROPIC_AUTH_DISABLE_VERSION_CHECK=1`), so this never blocks or breaks a request.
+
+  This is the only outbound request the plugin makes to a host other than Anthropic's API — see the README's "Dynamic version resolution" section for the full resolution order and how to opt out.
+
 ## 0.0.2
 
 ### Patch Changes
