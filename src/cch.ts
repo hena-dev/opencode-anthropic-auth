@@ -1,5 +1,9 @@
 import { createHash } from 'node:crypto'
-import { CCH_POSITIONS, CCH_SALT, CLAUDE_CODE_VERSION } from './constants.ts'
+import {
+  CCH_POSITIONS,
+  CCH_SALT,
+  FALLBACK_CLAUDE_CODE_VERSION,
+} from './constants.ts'
 
 type Message = {
   role?: string
@@ -36,7 +40,7 @@ export function computeCCH(messageText: string): string {
  */
 export function computeVersionSuffix(
   messageText: string,
-  version: string = CLAUDE_CODE_VERSION,
+  version: string = FALLBACK_CLAUDE_CODE_VERSION,
 ): string {
   const chars = CCH_POSITIONS.map((index) => messageText[index] || '0').join('')
 
@@ -51,7 +55,7 @@ export function computeVersionSuffix(
  */
 export function buildBillingHeaderValue(
   messages: Message[],
-  version: string = CLAUDE_CODE_VERSION,
+  version: string = FALLBACK_CLAUDE_CODE_VERSION,
   entrypoint: string,
 ): string {
   const text = extractFirstUserMessageText(messages)

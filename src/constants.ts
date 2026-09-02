@@ -32,10 +32,23 @@ export const CLAUDE_CODE_IDENTITY =
 
 export const CCH_SALT = '59cf53e54c78'
 export const CCH_POSITIONS = [4, 7, 20]
-export const CLAUDE_CODE_VERSION = '2.1.87'
+
+/**
+ * Fallback Claude Code version, used when dynamic resolution (see
+ * version.ts) is disabled, offline, or fails. This is the version the
+ * CCH_SALT above was reverse-engineered against; it's also the floor
+ * that dynamically-resolved versions are clamped to, so keep it in sync
+ * with a real, historically-shipped Claude Code release.
+ */
+export const FALLBACK_CLAUDE_CODE_VERSION = '2.1.87'
 export const CLAUDE_CODE_ENTRYPOINT = 'sdk-cli'
 
-export const USER_AGENT = 'claude-cli/2.1.87 (external, cli)'
+/**
+ * Build the `user-agent` header value the real Claude Code CLI sends.
+ */
+export function buildUserAgent(version: string): string {
+  return `claude-cli/${version} (external, cli)`
+}
 
 /**
  * Anchors that identify paragraphs to remove from the system prompt.

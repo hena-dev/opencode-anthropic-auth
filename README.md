@@ -53,10 +53,36 @@ The plugin provides three authentication options:
 
 The plugin supports the following environment variables:
 
-| Variable                          | Description                                                                                                                                                                                 |
-|-----------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `ANTHROPIC_BASE_URL`              | Override the API endpoint URL (e.g. for proxying). Must be a valid HTTP(S) URL.                                                                                                             |
-| `ANTHROPIC_INSECURE`              | Set to `1` or `true` to skip TLS certificate verification. Only effective when `ANTHROPIC_BASE_URL` is also set.                                                                            |
+| Variable                                            | Description                                                                                                                                                                                 |
+|------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `ANTHROPIC_BASE_URL`                                | Override the API endpoint URL (e.g. for proxying). Must be a valid HTTP(S) URL.                                                                                                             |
+| `ANTHROPIC_INSECURE`                                | Set to `1` or `true` to skip TLS certificate verification. Only effective when `ANTHROPIC_BASE_URL` is also set.                                                                            |
+| `CLAUDE_CODE_VERSION`                                | Pin the reported Claude Code version (e.g. `2.1.87`) instead of resolving it dynamically. Same variable name the real Claude Code CLI reads for itself.                                    |
+| `OPENCODE_ANTHROPIC_AUTH_DISABLE_VERSION_CHECK`     | Set to `1` or `true` to disable the npm version lookup entirely and always use the plugin's built-in fallback version, with no outbound request and no disk cache.                          |
+
+The plugin config also accepts options for the same two settings, if you'd rather not use environment variables:
+
+```json
+{
+  "plugin": [
+    ["@henadev/opencode-anthropic-auth", {
+      "claudeCodeVersion": "2.1.87",
+      "disableVersionCheck": false
+    }]
+  ]
+}
+```
+
+### Dynamic version resolution
+
+The `user-agent` header and the billing header's `cc_version` field (see below) report a Claude Code version number. Rather than shipping a version that gets stale the moment a new Claude Code release ships, the plugin resolves it dynamically:
+
+1. On the first proxied request of a session, it checks (in order): an explicit override (`CLAUDE_CODE_VERSION` env var or the `claudeCodeVersion` option), then a local cache file at `~/.cache/opencode-anthropic-auth/claude-code-version.json` (or `$XDG_CACHE_HOME/opencode-anthropic-auth/...`).
+2. If the cache is missing or older than 24 hours, it queries `registry.npmjs.org` for the `latest` dist-tag of `@anthropic-ai/claude-code` — a single ~60-byte request, with a 2 second timeout. A stale cache is still used immediately for that request; the refresh happens in the background for next time.
+3. The result is cached to disk and reused for the rest of the session (a real Claude Code process doesn't change version mid-session, and neither does this plugin).
+4. If the lookup fails for any reason (offline, npm unreachable, malformed response), or if `OPENCODE_ANTHROPIC_AUTH_DISABLE_VERSION_CHECK` is set, it falls back to a known-good pinned version baked into the plugin — no request ever blocks or fails because of this.
+
+This is the only outbound request this plugin makes to a host other than Anthropic's own API. If you'd rather it never happen, set `OPENCODE_ANTHROPIC_AUTH_DISABLE_VERSION_CHECK=1`.
 
 ## How It Works
 
