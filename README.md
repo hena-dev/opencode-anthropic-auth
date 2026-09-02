@@ -116,6 +116,8 @@ bun change          # create a changeset describing your changes
 
 When changesets are merged to `main`, CI will automatically open a release PR. Merging that PR publishes to npm.
 
+Publishing uses [npm trusted publishing](https://docs.npmjs.com/trusted-publishers) (OIDC) from GitHub Actions — there's no `NPM_TOKEN` secret to manage, and published versions carry [provenance attestations](https://docs.npmjs.com/generating-provenance-statements).
+
 ## License
 
 MIT
