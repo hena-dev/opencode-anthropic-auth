@@ -104,13 +104,31 @@ export function setOAuthHeaders(
  * Add TOOL_PREFIX to tool names in the request body.
  * Prefixes both tool definitions and tool_use blocks in messages.
  */
-export function prefixToolNames(parsed: Record<string, unknown>): string {
+export function prefixToolNames(
+  parsed: Record<string, unknown>,
+  names = new Map<string, string>(),
+): string {
+  const alias = (name: string) => {
+    for (const [wire, original] of names) {
+      if (original === name) return wire
+    }
+    const base = prefixName(name).replace(/[^a-zA-Z0-9_-]/g, '_')
+    let wire = base.slice(0, 64)
+    let count = 1
+    while (names.has(wire)) {
+      const suffix = `_${count++}`
+      wire = base.slice(0, 64 - suffix.length) + suffix
+    }
+    names.set(wire, name)
+    return wire
+  }
   if (parsed.tools && Array.isArray(parsed.tools)) {
     parsed.tools = parsed.tools.map(
-      (tool: { name?: string; [k: string]: unknown }) => ({
-        ...tool,
-        name: tool.name ? prefixName(tool.name) : tool.name,
-      }),
+      (tool: { name?: string; type?: string; [k: string]: unknown }) =>
+        // Server-executed tools have protocol-defined names.
+        tool.type && tool.type !== 'custom' && tool.type !== 'function'
+          ? tool
+          : { ...tool, name: tool.name ? alias(tool.name) : tool.name },
     )
   }
 
@@ -127,7 +145,7 @@ export function prefixToolNames(parsed: Record<string, unknown>): string {
         if (msg.content && Array.isArray(msg.content)) {
           msg.content = msg.content.map((block) => {
             if (block.type === 'tool_use' && block.name) {
-              return { ...block, name: prefixName(block.name) }
+              return { ...block, name: alias(block.name) }
             }
             return block
           })
@@ -135,6 +153,16 @@ export function prefixToolNames(parsed: Record<string, unknown>): string {
         return msg
       },
     )
+  }
+
+  if (
+    isRecord(parsed.tool_choice) &&
+    parsed.tool_choice.type === 'tool' &&
+    typeof parsed.tool_choice.name === 'string'
+  ) {
+    const name = parsed.tool_choice.name
+    const wire = [...names].find(([, original]) => original === name)?.[0]
+    if (wire) parsed.tool_choice.name = wire
   }
 
   return JSON.stringify(parsed)
@@ -339,6 +367,7 @@ export function prependClaudeCodeIdentity(system: unknown): SystemBlock[] {
 export function rewriteRequestBody(
   body: string,
   version: string = FALLBACK_CLAUDE_CODE_VERSION,
+  names = new Map<string, string>(),
 ): string {
   try {
     const parsed = JSON.parse(body)
@@ -363,7 +392,7 @@ export function rewriteRequestBody(
       parsed.system.unshift({ type: 'text', text: billingHeader })
     }
 
-    return prefixToolNames(parsed)
+    return prefixToolNames(parsed, names)
   } catch {
     return body
   }
@@ -372,30 +401,90 @@ export function rewriteRequestBody(
 /**
  * Create a streaming response that strips the tool prefix from tool names.
  */
-export function createStrippedStream(response: Response): Response {
-  if (!response.body) return response
+export function createStrippedStream(
+  response: Response,
+  names: ReadonlyMap<string, string>,
+): Response {
+  if (!response.body || !response.ok || names.size === 0) return response
+  const type = response.headers.get('content-type') ?? ''
+  const json = type.includes('application/json')
+  if (!json && !type.includes('text/event-stream')) return response
 
-  const reader = response.body.getReader()
-  const decoder = new TextDecoder()
-  const encoder = new TextEncoder()
-
-  const stream = new ReadableStream({
-    async pull(controller) {
-      const { done, value } = await reader.read()
-      if (done) {
-        controller.close()
-        return
+  const restore = (text: string) => {
+    try {
+      const value: unknown = JSON.parse(text)
+      if (!isRecord(value)) return text
+      const block = (item: unknown) => {
+        if (
+          !isRecord(item) ||
+          item.type !== 'tool_use' ||
+          typeof item.name !== 'string'
+        )
+          return
+        item.name = names.get(item.name) ?? item.name
       }
+      if (value.type === 'content_block_start') block(value.content_block)
+      if (value.type === 'message' && Array.isArray(value.content))
+        value.content.forEach(block)
+      return JSON.stringify(value)
+    } catch {
+      return text
+    }
+  }
+  const frame = (text: string) => {
+    const lines = text.split(/\r?\n/)
+    const data = lines
+      .filter((line) => line.startsWith('data:'))
+      .map((line) => line.slice(5).replace(/^ /, ''))
+    if (!data.length) return text
+    const original = data.join('\n')
+    const restored = restore(original)
+    if (restored === original) return text
+    let emitted = false
+    return lines
+      .flatMap((line) => {
+        if (!line.startsWith('data:')) return [line]
+        if (emitted) return []
+        emitted = true
+        return [`data: ${restored}`]
+      })
+      .join('\n')
+  }
 
-      let text = decoder.decode(value, { stream: true })
-      text = stripToolPrefix(text)
-      controller.enqueue(encoder.encode(text))
-    },
-  })
+  let pending = ''
+  // Decode UTF-8 and assemble complete SSE frames before touching JSON. The
+  // pipe chain propagates backpressure, cancellation, and upstream errors.
+  const stream = response.body
+    .pipeThrough(new TextDecoderStream())
+    .pipeThrough(
+      new TransformStream<string, string>({
+        transform(chunk, controller) {
+          pending += chunk
+          if (json) return
+          let separator = /\r?\n\r?\n/.exec(pending)
+          while (separator) {
+            controller.enqueue(
+              frame(pending.slice(0, separator.index)) + separator[0],
+            )
+            pending = pending.slice(separator.index + separator[0].length)
+            separator = /\r?\n\r?\n/.exec(pending)
+          }
+        },
+        flush(controller) {
+          if (pending)
+            controller.enqueue(json ? restore(pending) : frame(pending))
+        },
+      }),
+    )
+    .pipeThrough(new TextEncoderStream())
 
+  const headers = new Headers(response.headers)
+  headers.delete('content-length')
+  headers.delete('content-encoding')
+  headers.delete('etag')
   return new Response(stream, {
     status: response.status,
     statusText: response.statusText,
-    headers: response.headers,
+    headers,
   })
 }

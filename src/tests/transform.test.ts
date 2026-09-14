@@ -422,12 +422,21 @@ describe('createStrippedStream', () => {
       },
     })
 
-    const original = new Response(stream, { status: 200 })
-    const stripped = createStrippedStream(original)
+    const original = new Response(stream, {
+      status: 200,
+      headers: { 'content-type': 'text/event-stream' },
+    })
+    const stripped = createStrippedStream(
+      original,
+      new Map([
+        ['mcp_bash', 'bash'],
+        ['mcp_read', 'read'],
+      ]),
+    )
 
     const text = await stripped.text()
-    expect(text).toContain('"name": "bash"')
-    expect(text).toContain('"name": "read"')
+    expect(text).toContain('"name":"bash"')
+    expect(text).toContain('"name":"read"')
     expect(text).not.toContain('mcp_bash')
     expect(text).not.toContain('mcp_read')
   })
@@ -445,14 +454,14 @@ describe('createStrippedStream', () => {
       headers: { 'x-custom': 'value' },
     })
 
-    const stripped = createStrippedStream(original)
+    const stripped = createStrippedStream(original, new Map())
     expect(stripped.status).toBe(201)
     expect(stripped.headers.get('x-custom')).toBe('value')
   })
 
   test('returns original response if no body', () => {
     const original = new Response(null, { status: 204 })
-    const result = createStrippedStream(original)
+    const result = createStrippedStream(original, new Map())
     expect(result).toBe(original)
   })
 })

@@ -1,5 +1,15 @@
 # @henadev/opencode-anthropic-auth
 
+## 0.2.0
+
+### Minor Changes
+
+- Migrate to the OpenCode v2 `@opencode/plugin` API with the stable plugin ID `henadev.anthropic-auth`. This release requires OpenCode v2; configuration now uses `plugins` and object-form options.
+- Register Claude Pro/Max through integrations, with host-managed credential persistence and token refresh. Use the built-in integration for API keys; remove the unsupported OAuth-to-API-key creation flow and per-request TLS bypass.
+- Move request rewriting to native HTTP hooks and subscription pricing to a replayable catalog transform that follows credential switches.
+- Preserve dynamic Claude Code version resolution and migrate its cache to durable plugin storage.
+- Restore exact tool names using request-scoped aliases, including collisions, forced tool choices, and history. Handle fragmented UTF-8/SSE responses, JSON responses, and cancellation correctly.
+
 ## 0.1.0
 
 ### Minor Changes
