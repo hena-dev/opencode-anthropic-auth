@@ -17,13 +17,19 @@
 
 An [OpenCode](https://github.com/anomalyco/opencode) plugin that provides Anthropic OAuth authentication, enabling Claude Pro/Max users to use their subscription directly with OpenCode.
 
+## Version support
+
+**Version 0.2.0 requires OpenCode v2 and Bun 1.4.2 or newer**, using the `@opencode/plugin` API (SDK dependency pinned to `2.0.3`). Versions through `0.1.0` use the OpenCode v1 plugin API.
+
+Upstream also maintains a [v2 branch](https://github.com/ex-machina-co/opencode-anthropic-auth/tree/v2/main), published as `@ex-machina/opencode-anthropic-auth@next` (`2.0.0-next.1` as of September 14, 2026). That release targets the older `@opencode-ai/plugin@0.0.0-next-17444` beta API. This fork targets the current `@opencode/plugin` API and retains dynamic version resolution and subscription cost display.
+
 ## Usage
 
 Add the plugin to your OpenCode configuration:
 
 ```json
 {
-  "plugin": ["@henadev/opencode-anthropic-auth"]
+  "plugins": ["@henadev/opencode-anthropic-auth@0.2.0"]
 }
 ```
 
@@ -36,18 +42,25 @@ Add the plugin to your OpenCode configuration:
 
 ```json
 {
-  "plugin": ["@henadev/opencode-anthropic-auth@0.0.1"]
+  "plugins": ["@henadev/opencode-anthropic-auth@0.2.0"]
 }
 ```
 
 ## Authentication Methods
 
-The plugin provides three authentication options:
+Run `/connect`, select **Anthropic → Claude Pro/Max**, and complete the OAuth flow. OpenCode v2 stores the credentials and automatically persists refreshed tokens.
 
-- **Claude Pro/Max** - OAuth flow via `claude.ai` for Pro/Max subscribers. Uses your existing subscription at no additional API cost.
-    - run the `/connect` command, select `Anthropic (API key)` -> `Claude Pro/Max` and do OAuth
-- **Create an API Key** - OAuth flow via `console.anthropic.com` that creates an API key on your behalf.
-- **Manually enter API Key** - Standard API key entry for users who already have one.
+- **Claude Pro/Max** — The plugin's OAuth method, using your subscription.
+- **Manual API key / `ANTHROPIC_API_KEY`** — Provided by OpenCode's built-in Anthropic integration. API-key requests retain normal API pricing and are not rewritten by this plugin.
+
+The v1 **Create an API Key** OAuth option is removed: v2 OAuth callbacks must return OAuth credentials, not a generated API key. Create a key in the Anthropic Console and enter it through the built-in key method instead.
+
+### Migrating from 0.1.0
+
+1. Change `plugin` to `plugins` and replace package/options tuples with the object format below.
+2. Upgrade the plugin to `0.2.0` and quit and restart OpenCode v2.
+3. Connect through v2's `/connect` flow if no Claude Pro/Max credential is available. The plugin does not copy credentials from v1's auth file.
+4. Replace `ANTHROPIC_INSECURE` with a trusted certificate setup for your custom HTTPS endpoint.
 
 ## Configuration
 
@@ -56,7 +69,7 @@ The plugin supports the following environment variables:
 | Variable                                            | Description                                                                                                                                                                                 |
 |------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `ANTHROPIC_BASE_URL`                                | Override the API endpoint URL (e.g. for proxying). Must be a valid HTTP(S) URL.                                                                                                             |
-| `ANTHROPIC_INSECURE`                                | Set to `1` or `true` to skip TLS certificate verification. Only effective when `ANTHROPIC_BASE_URL` is also set.                                                                            |
+| `ANTHROPIC_INSECURE`                                | Unsupported in v2. If enabled with a custom endpoint, logs a notice and leaves TLS verification enabled. Use a trusted certificate. |
 | `CLAUDE_CODE_VERSION`                                | Pin the reported Claude Code version (e.g. `2.1.87`) instead of resolving it dynamically. Same variable name the real Claude Code CLI reads for itself.                                    |
 | `OPENCODE_ANTHROPIC_AUTH_DISABLE_VERSION_CHECK`     | Set to `1` or `true` to disable the npm version lookup entirely and always use the plugin's built-in fallback version, with no outbound request and no disk cache.                          |
 
@@ -64,11 +77,14 @@ The plugin config also accepts options for the same two settings, if you'd rathe
 
 ```json
 {
-  "plugin": [
-    ["@henadev/opencode-anthropic-auth", {
-      "claudeCodeVersion": "2.1.87",
-      "disableVersionCheck": false
-    }]
+  "plugins": [
+    {
+      "package": "@henadev/opencode-anthropic-auth@0.2.0",
+      "options": {
+        "claudeCodeVersion": "2.1.87",
+        "disableVersionCheck": false
+      }
+    }
   ]
 }
 ```
@@ -77,9 +93,9 @@ The plugin config also accepts options for the same two settings, if you'd rathe
 
 The `user-agent` header and the billing header's `cc_version` field (see below) report a Claude Code version number. Rather than shipping a version that gets stale the moment a new Claude Code release ships, the plugin resolves it dynamically:
 
-1. On the first proxied request of a session, it checks (in order): an explicit override (`CLAUDE_CODE_VERSION` env var or the `claudeCodeVersion` option), then a local cache file at `~/.cache/opencode-anthropic-auth/claude-code-version.json` (or `$XDG_CACHE_HOME/opencode-anthropic-auth/...`).
+1. On the first subscription request of a plugin instance, it checks (in order): the `claudeCodeVersion` option, the `CLAUDE_CODE_VERSION` environment variable, then the `claude-code-version` entry in OpenCode's durable plugin storage, scoped to `henadev.anthropic-auth`.
 2. If the cache is missing or older than 24 hours, it queries `registry.npmjs.org` for the `latest` dist-tag of `@anthropic-ai/claude-code` — a single ~60-byte request, with a 2 second timeout. A stale cache is still used immediately for that request; the refresh happens in the background for next time.
-3. The result is cached to disk and reused for the rest of the session (a real Claude Code process doesn't change version mid-session, and neither does this plugin).
+3. The result is persisted in plugin storage and reused for the lifetime of the plugin instance. The v1 cache file is no longer read or written. Quit and restart OpenCode to pick up changed options or a refreshed version.
 4. If the lookup fails for any reason (offline, npm unreachable, malformed response), or if `OPENCODE_ANTHROPIC_AUTH_DISABLE_VERSION_CHECK` is set, it falls back to a known-good pinned version baked into the plugin — no request ever blocks or fails because of this.
 
 This is the only outbound request this plugin makes to a host other than Anthropic's own API. If you'd rather it never happen, set `OPENCODE_ANTHROPIC_AUTH_DISABLE_VERSION_CHECK=1`.
@@ -93,7 +109,11 @@ For Claude Pro/Max authentication, the plugin:
 3. Automatically refreshes expired tokens
 4. Injects the required OAuth headers and beta flags into API requests
 5. Sanitizes the system prompt for compatibility (see below)
-6. Zeros out model costs (since usage is covered by the subscription)
+6. Zeros out catalog model costs while Claude Pro/Max is active, restoring API pricing when switching to an API key or disconnecting
+
+Request transformations use v2's provider-filtered `http.request` and `http.response` hooks. They cover native Anthropic session requests, including primary requests, titles, compaction, and `ctx.session.generate`. Standalone `ctx.generate.text` and custom AI SDK fallback transports bypass these hooks in the target host and are not supported for subscription request rewriting.
+
+Tool aliases are request-scoped and reversed before OpenCode parses JSON or SSE responses. Streaming transformations preserve UTF-8, chunk boundaries, cancellation, and exact original tool-name casing.
 
 ### System Prompt Sanitization
 
@@ -121,7 +141,7 @@ This does three things:
 2. Symlinks the build output into `.opencode/plugins/` so OpenCode loads it as a local plugin
 3. Starts `tsc --watch` for automatic rebuilds on source changes
 
-After starting the dev script, restart OpenCode in this project directory to pick up the local build. Any edits to `src/` will trigger a rebuild — restart OpenCode again to load the new version.
+After starting the dev script, quit and restart OpenCode v2 in this project directory to pick up the local build. Any edits to `src/` will trigger a rebuild — restart OpenCode again to load the new version. The active plugin list should show `henadev.anthropic-auth`, and Anthropic should offer the `Claude Pro/Max` OAuth method.
 
 Ctrl+C stops the watcher and cleans up the symlink. If the process was killed without cleanup (e.g. `kill -9`), you can manually remove the symlink:
 
@@ -130,7 +150,17 @@ bun run dev:clean
 ```
 
 > [!NOTE]
-> If you have the npm version of this plugin in your global OpenCode config, both will load. The local version takes precedence for auth handling.
+> Remove the npm entry when testing the local build. V2 requires unique plugin IDs; loading both copies produces a duplicate-ID error.
+
+### Checks
+
+```bash
+bun test
+bun run types
+bun run lint
+bun run format:check
+bun run build
+```
 
 ### Publishing
 

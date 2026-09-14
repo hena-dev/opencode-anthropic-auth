@@ -80,17 +80,9 @@ async function exchangeCode(
     }
   }
 
-  const json = (await result.json()) as {
-    refresh_token: string
-    access_token: string
-    expires_in: number
-  }
-
   return {
     type: 'success',
-    refresh: json.refresh_token,
-    access: json.access_token,
-    expires: Date.now() + json.expires_in * 1000,
+    ...parseTokens(await result.json()),
   }
 }
 
@@ -142,4 +134,74 @@ export async function exchange(
   }
 
   return exchangeCode(callback, verifier, redirectUri)
+}
+
+/** The v2 integration host persists the returned token rotation. */
+export async function refreshToken(refresh: string, signal?: AbortSignal) {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    if (attempt > 0) {
+      await new Promise<void>((resolve, reject) => {
+        signal?.throwIfAborted()
+        const abort = () => {
+          clearTimeout(timer)
+          reject(signal?.reason)
+        }
+        const timer = setTimeout(
+          () => {
+            signal?.removeEventListener('abort', abort)
+            resolve()
+          },
+          500 * 2 ** (attempt - 1),
+        )
+        signal?.addEventListener('abort', abort, { once: true })
+      })
+    }
+    const response = await fetch(TOKEN_URL, {
+      method: 'POST',
+      signal: AbortSignal.any([
+        AbortSignal.timeout(15_000),
+        ...(signal ? [signal] : []),
+      ]),
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json, text/plain, */*',
+        'User-Agent': 'axios/1.13.6',
+      },
+      body: JSON.stringify({
+        grant_type: 'refresh_token',
+        refresh_token: refresh,
+        client_id: CLIENT_ID,
+      }),
+    })
+    if (!response.ok) {
+      await response.body?.cancel()
+      if (response.status >= 500 && attempt < 2) continue
+      throw new Error(`Anthropic token refresh failed: ${response.status}`)
+    }
+    return parseTokens(await response.json())
+  }
+  throw new Error('Anthropic token refresh exhausted retries')
+}
+
+function parseTokens(value: unknown) {
+  if (
+    !value ||
+    typeof value !== 'object' ||
+    !('access_token' in value) ||
+    typeof value.access_token !== 'string' ||
+    !value.access_token ||
+    !('refresh_token' in value) ||
+    typeof value.refresh_token !== 'string' ||
+    !value.refresh_token ||
+    !('expires_in' in value) ||
+    typeof value.expires_in !== 'number' ||
+    !Number.isFinite(value.expires_in) ||
+    value.expires_in <= 0
+  )
+    throw new Error('Invalid Anthropic OAuth token response')
+  return {
+    access: value.access_token,
+    refresh: value.refresh_token,
+    expires: Date.now() + Math.floor(value.expires_in * 1000),
+  }
 }
