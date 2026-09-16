@@ -106,13 +106,12 @@ export default Plugin.define({
         })
       })
 
-      await ctx.catalog.transform((editor) => {
+      await ctx.model.transform((editor) => {
         if (!subscription) return
-        const provider = editor.provider.get('anthropic')
-        if (!provider) return
-        for (const id of provider.models.keys()) {
-          editor.model.update('anthropic', id, (model) => {
-            model.cost = []
+        for (const model of editor.list('anthropic')) {
+          // The editor exposes a branded model ID but accepts a plain string.
+          editor.update('anthropic', String(model.id), (draft) => {
+            draft.cost = []
           })
         }
       })
@@ -121,7 +120,7 @@ export default Plugin.define({
         const next = !!(await activeOAuth(ctx))
         if (next === subscription || controller.signal.aborted) return
         subscription = next
-        await ctx.catalog.reload()
+        await ctx.model.reload()
       }
       // A failed/expired login must not prevent registering the login method.
       await updateCosts().catch(() => {})
