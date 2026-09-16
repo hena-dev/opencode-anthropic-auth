@@ -1,5 +1,15 @@
 # @henadev/opencode-anthropic-auth
 
+## 0.3.0
+
+### Minor Changes
+
+- [#23](https://github.com/hena-dev/opencode-anthropic-auth/pull/23) [`54cfec7`](https://github.com/hena-dev/opencode-anthropic-auth/commit/54cfec7b3df4aa0b7e12544491bf8bb7677fe4d1) Thanks [@hena-dev](https://github.com/hena-dev)! - Support OpenCode v2.0.4 and pin the `@opencode/plugin` dependency to `2.0.4`.
+
+  OpenCode 2.0.4 removed the plugin `catalog` domain and split it into separate `provider` and `model` domains. Subscription pricing now applies through `ctx.model.transform` and replays with `ctx.model.reload()` when the active credential switches.
+
+  This release requires an OpenCode 2.0.4 or newer host. Stay on `0.2.0` for OpenCode 2.0.0 through 2.0.3.
+
 ## 0.2.0
 
 ### Minor Changes
