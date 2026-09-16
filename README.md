@@ -19,7 +19,7 @@ An [OpenCode](https://github.com/anomalyco/opencode) plugin that provides Anthro
 
 ## Version support
 
-**Version 0.2.0 requires OpenCode v2 and Bun 1.4.2 or newer**, using the `@opencode/plugin` API (SDK dependency pinned to `2.0.3`). Versions through `0.1.0` use the OpenCode v1 plugin API.
+**Version 0.3.0 requires OpenCode v2.0.4 or newer and Bun 1.4.2 or newer**, using the `@opencode/plugin` API (SDK dependency pinned to `2.0.4`). OpenCode 2.0.4 split the plugin `catalog` domain into separate `provider` and `model` domains, so this release does not run on earlier v2 hosts — stay on `0.2.0` for OpenCode 2.0.0 through 2.0.3. Versions through `0.1.0` use the OpenCode v1 plugin API.
 
 Upstream also maintains a [v2 branch](https://github.com/ex-machina-co/opencode-anthropic-auth/tree/v2/main), published as `@ex-machina/opencode-anthropic-auth@next` (`2.0.0-next.1` as of September 14, 2026). That release targets the older `@opencode-ai/plugin@0.0.0-next-17444` beta API. This fork targets the current `@opencode/plugin` API and retains dynamic version resolution and subscription cost display.
 
@@ -29,7 +29,7 @@ Add the plugin to your OpenCode configuration:
 
 ```json
 {
-  "plugins": ["@henadev/opencode-anthropic-auth@0.2.0"]
+  "plugins": ["@henadev/opencode-anthropic-auth@0.3.0"]
 }
 ```
 
@@ -42,7 +42,7 @@ Add the plugin to your OpenCode configuration:
 
 ```json
 {
-  "plugins": ["@henadev/opencode-anthropic-auth@0.2.0"]
+  "plugins": ["@henadev/opencode-anthropic-auth@0.3.0"]
 }
 ```
 
@@ -58,7 +58,7 @@ The v1 **Create an API Key** OAuth option is removed: v2 OAuth callbacks must re
 ### Migrating from 0.1.0
 
 1. Change `plugin` to `plugins` and replace package/options tuples with the object format below.
-2. Upgrade the plugin to `0.2.0` and quit and restart OpenCode v2.
+2. Upgrade the plugin to `0.3.0` and quit and restart OpenCode v2.
 3. Connect through v2's `/connect` flow if no Claude Pro/Max credential is available. The plugin does not copy credentials from v1's auth file.
 4. Replace `ANTHROPIC_INSECURE` with a trusted certificate setup for your custom HTTPS endpoint.
 
@@ -79,7 +79,7 @@ The plugin config also accepts options for the same two settings, if you'd rathe
 {
   "plugins": [
     {
-      "package": "@henadev/opencode-anthropic-auth@0.2.0",
+      "package": "@henadev/opencode-anthropic-auth@0.3.0",
       "options": {
         "claudeCodeVersion": "2.1.87",
         "disableVersionCheck": false
@@ -109,7 +109,7 @@ For Claude Pro/Max authentication, the plugin:
 3. Automatically refreshes expired tokens
 4. Injects the required OAuth headers and beta flags into API requests
 5. Sanitizes the system prompt for compatibility (see below)
-6. Zeros out catalog model costs while Claude Pro/Max is active, restoring API pricing when switching to an API key or disconnecting
+6. Zeros out model costs while Claude Pro/Max is active, restoring API pricing when switching to an API key or disconnecting
 
 Request transformations use v2's provider-filtered `http.request` and `http.response` hooks. They cover native Anthropic session requests, including primary requests, titles, compaction, and `ctx.session.generate`. Standalone `ctx.generate.text` and custom AI SDK fallback transports bypass these hooks in the target host and are not supported for subscription request rewriting.
 

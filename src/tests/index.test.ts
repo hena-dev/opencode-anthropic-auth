@@ -6,11 +6,11 @@ import {
   type Plugin,
   Provider,
 } from '@opencode/plugin'
-import type { CatalogEditor } from '@opencode/plugin/promise/catalog'
 import type {
   IntegrationEditor,
   IntegrationOAuthMethodRegistration,
 } from '@opencode/plugin/promise/integration'
+import type { ModelEditor } from '@opencode/plugin/promise/model'
 import type {
   SessionHttpRequest,
   SessionHttpResponse,
@@ -31,7 +31,7 @@ async function fixture(oauth = true) {
   let method: IntegrationOAuthMethodRegistration
   let before: (event: SessionHttpRequest) => Promise<void>
   let after: (event: SessionHttpResponse) => void
-  let transform: (editor: CatalogEditor) => void
+  let transform: (editor: ModelEditor) => void
   let nextEvent:
     | ((event: { type: 'credential.switched' } | undefined) => void)
     | undefined
@@ -41,18 +41,22 @@ async function fixture(oauth = true) {
   const storage = new Map()
   const filters: unknown[] = []
   const reload = mock(async () => {
-    // Real transforms replay on the base catalog, rather than the last output.
-    const model = { cost: structuredClone(prices) }
+    // Real transforms replay on the base candidates, rather than the last output.
+    const model = { id: 'claude', cost: structuredClone(prices) }
+    const candidates = new Map([['anthropic', new Map([[model.id, model]])]])
     transform({
-      provider: { get: () => ({ models: new Map([['claude', model]]) }) },
-      model: {
-        update: (
-          _provider: string,
-          _id: string,
-          update: (draft: typeof model) => void,
-        ) => update(model),
+      list: (provider: string) => [
+        ...(candidates.get(provider)?.values() ?? []),
+      ],
+      update: (
+        provider: string,
+        id: string,
+        update: (draft: typeof model) => void,
+      ) => {
+        const candidate = candidates.get(provider)?.get(id)
+        if (candidate) update(candidate)
       },
-    } as unknown as CatalogEditor)
+    } as unknown as ModelEditor)
     costs = model.cost
   })
   const ctx = {
@@ -83,7 +87,7 @@ async function fixture(oauth = true) {
         resolve: async () => credential,
       },
     },
-    catalog: {
+    model: {
       transform: async (callback: typeof transform) => {
         transform = callback
       },
