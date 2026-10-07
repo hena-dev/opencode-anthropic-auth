@@ -23,7 +23,7 @@ jobs:
           node-version: "24"
           registry-url: "https://registry.npmjs.org"
           package-manager-cache: false
-      - uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4
+      - uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca # v4
       - run: bun install --frozen-lockfile
 
       - name: Create Release PR or Publish
