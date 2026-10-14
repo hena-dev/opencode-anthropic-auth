@@ -32,7 +32,7 @@
     "release": "bun run build && bun change publish"
   },
   "dependencies": {
-    "@opencode/plugin": "2.0.4"
+    "@opencode/plugin": "2.0.26"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.2",
